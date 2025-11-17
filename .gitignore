@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Spark/PySpark
+*.log
+*.out
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Data Lake - Generated Data (Bronze, Silver, Gold layers)
+# Keep landing zone (source data), ignore processed data
+datalake/bronze/
+datalake/silver/
+datalake/gold/
+
+# Parquet files (generated)
+*.parquet
+*.parquet.crc
+
+# Spark checkpoint and temporary files
+checkpoints/
+*.checkpoint
+*.tmp
+*.temp
+
+# Spark success markers
+_SUCCESS
+._SUCCESS
+*.crc
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Environment variables
+.env
+.env.local
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+
