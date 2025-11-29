@@ -1,7 +1,7 @@
 # Cloud Provider Analytics - Python Dependencies
 
 # Core
-# pyspark>=3.5.0
+pyspark>=3.5.0
 
 # Data processing
 pandas>=2.0.0
@@ -9,6 +9,9 @@ numpy>=1.24.0
 
 # Utilities
 pyyaml>=6.0
+
+# Cassandra/AstraDB
+cassandra-driver>=3.28.0
 
 # Optional: Delta Lake support (uncomment if using Delta)
 # delta-spark>=3.0.0

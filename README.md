@@ -57,8 +57,21 @@ This ingests all CSV sources to the bronze layer:
 
 **Output:** All data is written to `datalake/bronze/` in Parquet format with ingestion metadata.
 
-### Phase 2: Silver Layer
-*To be implemented - Data quality and conformance transformations*
+### Phase 2: Silver Layer - Data Quality & Conformance
+
+**Run all Silver transformations:**
+```bash
+./scripts/run_silver_transformations.sh
+```
+
+This performs data quality transformations on all Bronze sources:
+- **Data Quality:** Validates ranges, detects outliers (z-score, MAD, percentiles), quarantines invalid records
+- **Schema Compatibility:** Handles schema_version v1/v2 for usage_events (carbon_kg, genai_tokens)
+- **Normalization:** Standardizes regions, services, metrics, currencies
+- **Enrichment:** Joins with customers_orgs and resources
+- **Validations:** Email formats, NPS scores (0-10), cost >= -0.01, service types, etc.
+
+**Output:** Clean data in `datalake/silver/` + quarantined records in `datalake/silver/quarantine/`
 
 ### Phase 3: Gold Layer
 *To be implemented - Business-ready aggregated datasets*
@@ -66,8 +79,23 @@ This ingests all CSV sources to the bronze layer:
 ### Phase 4: Speed Layer
 *To be implemented - Real-time processing for streaming data*
 
-### Phase 5: Serving Layer
-*To be implemented - Unified views combining batch and speed layers*
+### Phase 5: Serving Layer - AstraDB/Cassandra
+
+**Setup AstraDB (one-time):**
+1. Create free account at: https://astra.datastax.com/
+2. Create database: `cloud_analytics`
+3. Download secure connect bundle
+4. Create application token (Client ID + Secret)
+5. Update credentials in `src/config/cassandra_config.py`
+
+**Create keyspace and tables:**
+```bash
+python -m src.serving.cassandra_setup
+```
+
+This creates 5 query-optimized tables for the demo queries.
+
+**Output:** Cassandra tables ready for data loading
 
 ## Project Structure
 

@@ -9,15 +9,8 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 cd "$PROJECT_ROOT"
 
-# Source environment setup (sets JAVA_HOME to Java 8/11 if available)
-source "$SCRIPT_DIR/setup_env.sh" 2>/dev/null || {
-    # Fallback: try to set Java 8
-    JAVA_8_HOME=$(/usr/libexec/java_home -v 1.8 2>/dev/null || echo "")
-    if [ -n "$JAVA_8_HOME" ]; then
-        export JAVA_HOME="$JAVA_8_HOME"
-        export PATH="$JAVA_HOME/bin:$PATH"
-    fi
-}
+# Source environment setup (activates venv and sets Java 11)
+source "$PROJECT_ROOT/setup.sh"
 
 echo "========================================="
 echo "Batch Ingestion - Bronze Layer"

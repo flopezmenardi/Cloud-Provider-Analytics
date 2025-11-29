@@ -31,6 +31,26 @@ BRONZE_NPS_SURVEYS = BRONZE_ROOT / "nps_surveys"
 BRONZE_USAGE_EVENTS = BRONZE_ROOT / "usage_events"
 BRONZE_CHECKPOINT = BRONZE_ROOT / "checkpoints" / "usage_events"
 
+# Silver zone paths
+SILVER_ROOT = DATALAKE_ROOT / "silver"
+SILVER_QUARANTINE = DATALAKE_ROOT / "silver" / "quarantine"
+
+# Gold zone paths
+GOLD_ROOT = DATALAKE_ROOT / "gold"
+
+# Helper functions for Silver and Quarantine paths
+def get_silver_path(source_name: str) -> Path:
+    """Get Silver path for a source"""
+    return SILVER_ROOT / source_name
+
+def get_quarantine_path(source_name: str) -> Path:
+    """Get Quarantine path for a source"""
+    return SILVER_QUARANTINE / source_name
+
+def get_gold_path(mart_name: str) -> Path:
+    """Get Gold path for a mart"""
+    return GOLD_ROOT / mart_name
+
 # Ensure bronze directories exist
 for path in [
     BRONZE_USERS, BRONZE_CUSTOMERS_ORGS, BRONZE_RESOURCES,
@@ -39,4 +59,9 @@ for path in [
     BRONZE_USAGE_EVENTS, BRONZE_CHECKPOINT
 ]:
     path.mkdir(parents=True, exist_ok=True)
+
+# Ensure silver and gold root directories exist
+SILVER_ROOT.mkdir(parents=True, exist_ok=True)
+SILVER_QUARANTINE.mkdir(parents=True, exist_ok=True)
+GOLD_ROOT.mkdir(parents=True, exist_ok=True)
 
