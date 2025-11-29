@@ -20,7 +20,7 @@ source "$PROJECT_ROOT/setup.sh"
 
 # Run Gold mart creation
 echo "Creating all Gold marts..."
-python -m src.gold.create_all_marts
+python -m src.aggregations.create_all_marts
 
 echo ""
 echo "✓ Gold layer marts completed!"

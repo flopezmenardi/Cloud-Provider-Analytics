@@ -22,11 +22,11 @@ echo ""
 
 if [ "$MODE" == "batch" ]; then
     echo "Running in batch mode (one-time load)..."
-    python3 -m src.streaming.ingest_usage_events_stream batch
+    python3 -m src.ingestion.streaming.ingest_usage_events_stream batch
 else
     echo "Running in streaming mode (continuous)..."
     echo "Press Ctrl+C to stop"
-    python3 -m src.streaming.ingest_usage_events_stream
+    python3 -m src.ingestion.streaming.ingest_usage_events_stream
 fi
 
 echo ""

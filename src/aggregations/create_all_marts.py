@@ -1,6 +1,6 @@
 """
-Silver Layer Orchestrator
-Executes all Bronze → Silver transformations in the correct order.
+Gold Layer Orchestrator
+Executes all Gold mart creations in the correct order.
 """
 
 import logging
@@ -13,16 +13,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config.spark_config import get_spark_session
 
-# Import all transformation modules
-from src.silver import (
-    transform_customers_orgs_silver,
-    transform_users_silver,
-    transform_resources_silver,
-    transform_billing_monthly_silver,
-    transform_support_tickets_silver,
-    transform_marketing_touches_silver,
-    transform_nps_surveys_silver,
-    transform_usage_events_silver
+# Import all mart creation modules
+from src.aggregations import (
+    create_org_daily_usage_by_service,
+    create_revenue_by_org_month,
+    create_tickets_by_org_date,
+    create_genai_tokens_by_org_date,
+    create_cost_anomaly_mart
 )
 
 logging.basicConfig(
@@ -32,51 +29,51 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_all_silver_transformations():
+def create_all_gold_marts():
     """
-    Execute all Silver transformations in dependency order:
-    1. Customers/Orgs first (referenced by others)
-    2. Resources second (referenced by usage_events)
-    3. Rest of batch sources
-    4. Usage events last (enriched with resources and customers)
+    Execute all Gold mart creations in sequence.
+
+    Order:
+    1. org_daily_usage_by_service (from usage_events)
+    2. revenue_by_org_month (from billing + customers_orgs)
+    3. tickets_by_org_date (from support_tickets)
+    4. genai_tokens_by_org_date (from usage_events - v2 only)
+    5. cost_anomaly_mart (from usage_events - anomalies only)
     """
     start_time = datetime.now()
     logger.info("=" * 100)
-    logger.info("STARTING SILVER LAYER ORCHESTRATION")
+    logger.info("STARTING GOLD LAYER ORCHESTRATION")
     logger.info(f"Start time: {start_time}")
     logger.info("=" * 100)
 
-    transformations = [
-        ("customers_orgs", transform_customers_orgs_silver.transform_customers_orgs_to_silver),
-        ("resources", transform_resources_silver.transform_resources_to_silver),
-        ("users", transform_users_silver.transform_users_to_silver),
-        ("billing_monthly", transform_billing_monthly_silver.transform_billing_to_silver),
-        ("support_tickets", transform_support_tickets_silver.transform_support_tickets_to_silver),
-        ("marketing_touches", transform_marketing_touches_silver.transform_marketing_touches_to_silver),
-        ("nps_surveys", transform_nps_surveys_silver.transform_nps_surveys_to_silver),
-        ("usage_events", transform_usage_events_silver.transform_usage_events_to_silver),
+    marts = [
+        ("org_daily_usage_by_service", create_org_daily_usage_by_service.create_org_daily_usage_by_service),
+        ("revenue_by_org_month", create_revenue_by_org_month.create_revenue_by_org_month),
+        ("tickets_by_org_date", create_tickets_by_org_date.create_tickets_by_org_date),
+        ("genai_tokens_by_org_date", create_genai_tokens_by_org_date.create_genai_tokens_by_org_date),
+        ("cost_anomaly_mart", create_cost_anomaly_mart.create_cost_anomaly_mart),
     ]
 
     results = {}
-    spark = get_spark_session("Silver Layer Orchestrator")
+    spark = get_spark_session("Gold Layer Orchestrator")
 
     try:
-        for i, (name, transform_func) in enumerate(transformations, 1):
+        for i, (name, create_func) in enumerate(marts, 1):
             logger.info("")
             logger.info("=" * 100)
-            logger.info(f"[{i}/{len(transformations)}] Running transformation: {name}")
+            logger.info(f"[{i}/{len(marts)}] Creating mart: {name}")
             logger.info("=" * 100)
 
             try:
                 step_start = datetime.now()
-                transform_func(spark)
+                create_func(spark)
                 step_duration = (datetime.now() - step_start).total_seconds()
 
                 results[name] = {
                     "status": "SUCCESS",
                     "duration_seconds": step_duration
                 }
-                logger.info(f"✓ {name} completed successfully in {step_duration:.2f}s")
+                logger.info(f"✓ {name} created successfully in {step_duration:.2f}s")
 
             except Exception as e:
                 step_duration = (datetime.now() - step_start).total_seconds()
@@ -86,7 +83,7 @@ def run_all_silver_transformations():
                     "duration_seconds": step_duration
                 }
                 logger.error(f"✗ {name} FAILED after {step_duration:.2f}s: {e}", exc_info=True)
-                # Continue with other transformations even if one fails
+                # Continue with other marts even if one fails
                 continue
 
     finally:
@@ -98,7 +95,7 @@ def run_all_silver_transformations():
 
     logger.info("")
     logger.info("=" * 100)
-    logger.info("SILVER LAYER ORCHESTRATION SUMMARY")
+    logger.info("GOLD LAYER ORCHESTRATION SUMMARY")
     logger.info("=" * 100)
     logger.info(f"Start time:  {start_time}")
     logger.info(f"End time:    {end_time}")
@@ -108,13 +105,13 @@ def run_all_silver_transformations():
     successful = sum(1 for r in results.values() if r["status"] == "SUCCESS")
     failed = sum(1 for r in results.values() if r["status"] == "FAILED")
 
-    logger.info(f"Transformations: {successful} successful, {failed} failed")
+    logger.info(f"Marts: {successful} successful, {failed} failed")
     logger.info("")
 
     for name, result in results.items():
         status_symbol = "✓" if result["status"] == "SUCCESS" else "✗"
         duration = result["duration_seconds"]
-        logger.info(f"  {status_symbol} {name:25s} - {result['status']:10s} ({duration:6.2f}s)")
+        logger.info(f"  {status_symbol} {name:35s} - {result['status']:10s} ({duration:6.2f}s)")
 
         if result["status"] == "FAILED":
             logger.info(f"      Error: {result['error']}")
@@ -122,15 +119,15 @@ def run_all_silver_transformations():
     logger.info("=" * 100)
 
     if failed > 0:
-        logger.warning(f"⚠ {failed} transformation(s) failed. Please review logs above.")
+        logger.warning(f"⚠ {failed} mart(s) failed. Please review logs above.")
         return 1
     else:
-        logger.info("✓ All Silver transformations completed successfully!")
+        logger.info("✓ All Gold marts created successfully!")
         return 0
 
 
 def main():
-    exit_code = run_all_silver_transformations()
+    exit_code = create_all_gold_marts()
     sys.exit(exit_code)
 
 

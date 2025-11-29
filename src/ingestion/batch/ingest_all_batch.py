@@ -5,13 +5,13 @@ import logging
 from pyspark.sql import SparkSession
 
 from src.config.spark_config import get_spark_session
-from src.batch.ingest_users import ingest_users
-from src.batch.ingest_customers_orgs import ingest_customers_orgs
-from src.batch.ingest_resources import ingest_resources
-from src.batch.ingest_billing_monthly import ingest_billing_monthly
-from src.batch.ingest_support_tickets import ingest_support_tickets
-from src.batch.ingest_marketing_touches import ingest_marketing_touches
-from src.batch.ingest_nps_surveys import ingest_nps_surveys
+from src.ingestion.batch.ingest_users import ingest_users
+from src.ingestion.batch.ingest_customers_orgs import ingest_customers_orgs
+from src.ingestion.batch.ingest_resources import ingest_resources
+from src.ingestion.batch.ingest_billing_monthly import ingest_billing_monthly
+from src.ingestion.batch.ingest_support_tickets import ingest_support_tickets
+from src.ingestion.batch.ingest_marketing_touches import ingest_marketing_touches
+from src.ingestion.batch.ingest_nps_surveys import ingest_nps_surveys
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

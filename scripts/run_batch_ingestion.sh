@@ -18,7 +18,7 @@ echo "========================================="
 echo ""
 
 # Run batch ingestion for all sources
-python3 -m src.batch.ingest_all_batch
+python3 -m src.ingestion.batch.ingest_all_batch
 
 echo ""
 echo "========================================="

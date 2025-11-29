@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession
 
 from src.config.spark_config import get_spark_session
 from src.config.paths import LANDING_CUSTOMERS_ORGS
-from src.batch.bronze_ingestion_base import BronzeIngestionBase
+from src.ingestion.batch.bronze_ingestion_base import BronzeIngestionBase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

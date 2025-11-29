@@ -20,7 +20,7 @@ source "$PROJECT_ROOT/setup.sh"
 
 # Run Silver transformations
 echo "Running all Silver transformations..."
-python -m src.silver.transform_all
+python -m src.transformations.transform_all
 
 echo ""
 echo "✓ Silver layer transformations completed!"
