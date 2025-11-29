@@ -9,24 +9,31 @@ Lambda Architecture data pipeline for Cloud Provider Analytics, processing batch
 ```bash
 # Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 
 # Install Python packages
 pip install -r requirements.txt
 ```
 
-### 2. Java Setup
+### 2. Environment Setup
 
-The scripts automatically configure Java 8/11/17 for Spark compatibility. No manual setup needed.
+**Important:** PySpark 3.5+ requires Java 17.
 
-**If you encounter Java errors:**
 ```bash
-# Activate environment (sets Java 8 automatically)
-source activate_env.sh
+# Install Java 17 (macOS with Homebrew)
+brew install openjdk@17
 
-# Or manually set Java 8
-export JAVA_HOME=$(/usr/libexec/java_home -v 1.8)
+# Create symlink (macOS only)
+sudo ln -sfn /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk
+
+# Activate environment (sets Java 17 and Python venv)
+source setup.sh
 ```
+
+The `setup.sh` script automatically:
+- Activates Python virtual environment
+- Sets JAVA_HOME to Java 17
+- Verifies Java version
 
 ## Usage
 
@@ -57,7 +64,7 @@ This ingests all CSV sources to the bronze layer:
 
 **Output:** All data is written to `datalake/bronze/` in Parquet format with ingestion metadata.
 
-### Phase 2: Silver Layer - Data Quality & Conformance
+### Phase 2: Silver Layer - Data Quality & Conformance 
 
 **Run all Silver transformations:**
 ```bash
@@ -72,6 +79,20 @@ This performs data quality transformations on all Bronze sources:
 - **Validations:** Email formats, NPS scores (0-10), cost >= -0.01, service types, etc.
 
 **Output:** Clean data in `datalake/silver/` + quarantined records in `datalake/silver/quarantine/`
+
+**Results:**
+- `customers_orgs`: 80 records (100% valid)
+- `resources`: 400 records (100% valid)
+- `users`: 800 records (100% valid)
+- `billing_monthly`: 227 valid, 13 quarantined (94.58% quality)
+- `support_tickets`: 1,000 records (100% valid)
+- `marketing_touches`: 1,500 records (100% valid)
+- `nps_surveys`: 7 valid, 85 quarantined (7.61% quality - needs investigation)
+- `usage_events`: 42,989 valid, 211 quarantined (99.51% quality)
+  - Schema v1: 10,800 records
+  - Schema v2: 32,400 records
+  - Anomalies detected: 12,108 (28.03%)
+  - Partitioned by year/month for performance
 
 ### Phase 3: Gold Layer
 *To be implemented - Business-ready aggregated datasets*
@@ -133,19 +154,56 @@ tpe-bigdata/
 
 ## Requirements
 
-- Python 3.8+
-- Java 8, 11, or 17 (auto-detected by scripts)
+- Python 3.9+
+- Java 17 (required for PySpark 3.5+)
 - PySpark 3.5.0+
+- macOS, Linux, or Windows (with WSL)
 
 ## Troubleshooting
 
 **Java version errors:**
-- Scripts automatically use Java 8 if available
-- Run `source activate_env.sh` to manually set Java 8
+```
+java.lang.UnsupportedClassVersionError: ... class file version 61.0
+```
+- **Solution:** Install Java 17 (see setup instructions above)
+- PySpark 3.5+ is compiled with Java 17 and won't work with Java 8 or 11
 
 **Import errors:**
 - Ensure you're running from project root directory
 - Activate virtual environment: `source venv/bin/activate`
+- Run setup script: `source setup.sh`
 
 **Permission errors:**
 - Make scripts executable: `chmod +x scripts/*.sh`
+
+**PySpark PosixPath errors:**
+- All path conversions to `str()` are handled in the codebase
+- If you see this error, ensure you're using the latest version of the transformation files
+
+**Data Quality Issues:**
+- High quarantine rate for `nps_surveys` (92%) - investigate source data
+- Anomaly detection flags 28% of usage_events - this is normal for statistical outlier detection
+- Check quarantine files in `datalake/silver/quarantine/` for invalid records
+
+## Current Status
+
+### Completed
+- ✅ Bronze Layer (Batch + Streaming ingestion)
+  - 7 CSV files ingested
+  - 43,200 usage events from 120 JSONL files
+- ✅ Silver Layer (Data quality & conformance)
+  - 8/8 transformations completed
+  - 99%+ data quality for most datasets
+  - Anomaly detection with 3 statistical methods
+  - Schema v1/v2 compatibility
+
+### In Progress
+- 🔄 Gold Layer (Business aggregations)
+- 🔄 Speed Layer (Real-time processing)
+- 🔄 Serving Layer (AstraDB/Cassandra)
+
+### Next Steps
+1. Implement Gold Layer transformations (5 business marts)
+2. Load data to AstraDB/Cassandra
+3. Implement demo queries
+4. Create presentation and video
