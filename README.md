@@ -94,29 +94,104 @@ This performs data quality transformations on all Bronze sources:
   - Anomalies detected: 12,108 (28.03%)
   - Partitioned by year/month for performance
 
-### Phase 3: Gold Layer
-*To be implemented - Business-ready aggregated datasets*
+### Phase 3: Gold Layer - Business Marts
 
-### Phase 4: Speed Layer
-*To be implemented - Real-time processing for streaming data*
-
-### Phase 5: Serving Layer - AstraDB/Cassandra
-
-**Setup AstraDB (one-time):**
-1. Create free account at: https://astra.datastax.com/
-2. Create database: `cloud_analytics`
-3. Download secure connect bundle
-4. Create application token (Client ID + Secret)
-5. Update credentials in `src/config/cassandra_config.py`
-
-**Create keyspace and tables:**
+**Run all Gold mart creations:**
 ```bash
-python -m src.serving.cassandra_setup
+./scripts/run_gold_marts.sh
 ```
 
-This creates 5 query-optimized tables for the demo queries.
+This creates 5 business-ready aggregated datasets:
 
-**Output:** Cassandra tables ready for data loading
+1. **org_daily_usage_by_service** - Daily usage aggregations by org, date, and service
+   - Metrics: cost, requests, CPU hours, storage, carbon footprint, GenAI tokens
+   - 11,050 rows (3.9x compression from 42,989 events)
+
+2. **revenue_by_org_month** - Monthly revenue with USD normalization
+   - Metrics: total billed, credits, taxes, net revenue, invoice count
+   - Enriched with org name, industry, plan tier
+   - 227 rows
+
+3. **tickets_by_org_date** - Support ticket metrics
+   - Metrics by severity: total tickets, resolution time, SLA breach rate, CSAT
+   - Category breakdowns: billing, technical, access
+   - 984 rows
+
+4. **genai_tokens_by_org_date** - GenAI/LLM token consumption (schema v2 only)
+   - Metrics: total tokens, cost, cost per million tokens
+   - Filtered to 3,115 GenAI events → 848 aggregated rows
+
+5. **cost_anomaly_mart** - Aggregated cost anomalies for alerting
+   - Filters 12,034 anomalous events (27.99%) → 6,106 aggregated rows
+   - Detection method counts (z-score, MAD, percentiles)
+
+**Output:** Aggregated data in `datalake/gold/` partitioned by year/month
+
+**Execution time:** ~12 seconds for all 5 marts
+
+### Phase 4: Serving Layer - AstraDB
+
+The Serving Layer implements the Lambda Architecture serving component, loading Gold marts into AstraDB for low-latency queries using the Data API.
+
+**Prerequisites**: Complete Bronze, Silver, and Gold layers first.
+
+#### Quick Start (5 minutes)
+
+See detailed guide in [ASTRADB_SETUP.md](ASTRADB_SETUP.md)
+
+1. **Create AstraDB account** and database:
+   - Go to https://astra.datastax.com/
+   - Create database: `cloud_analytics`
+   - Keyspace: `cloud_analytics`
+   - Get API Endpoint and generate Token
+
+2. **Configure credentials** in `.env` file:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your credentials:
+   # ASTRADB_TOKEN=AstraCS:your_token_here
+   # ASTRADB_API_ENDPOINT=https://your-database-id.apps.astra.datastax.com
+   # ASTRADB_NAMESPACE=cloud_analytics
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   source setup.sh
+   pip install astrapy python-dotenv
+   ```
+
+4. **Run setup pipeline**:
+   ```bash
+   ./scripts/setup_astradb.sh      # Create collections
+   ./scripts/load_to_astradb.sh    # Load ~45K documents
+   ./scripts/run_demo_queries.sh   # Run 5 queries
+   ```
+
+**Expected runtime**: ~2 minutes total
+
+#### What Gets Created
+
+**5 AstraDB Collections** (NoSQL documents):
+- `org_daily_usage` - Daily cost queries by org and service (11,050 docs)
+- `org_service_costs` - Top-N services by cost with time windows (~33,150 docs)
+- `tickets_critical_daily` - Critical ticket metrics and SLA monitoring
+- `revenue_monthly` - Monthly revenue trends (227 docs)
+- `genai_tokens_daily` - GenAI token consumption (848 docs)
+
+#### Demo Queries
+
+The 5 demo queries showcase different analytics use cases:
+
+1. **Query 1:** Daily costs by organization and service (FinOps)
+2. **Query 2:** Top-N services by cost in time window (Cost optimization)
+3. **Query 3:** Critical tickets & SLA breach rate (Support operations)
+4. **Query 4:** Monthly revenue by organization (Finance)
+5. **Query 5:** GenAI token usage by organization (Product analytics)
+
+**See [ASTRADB_SETUP.md](ASTRADB_SETUP.md) for detailed step-by-step instructions with checkpoints and troubleshooting.**
+
+### Phase 5: Speed Layer
+*To be implemented - Real-time streaming aggregations (future work)*
 
 ## Project Structure
 
@@ -187,23 +262,41 @@ java.lang.UnsupportedClassVersionError: ... class file version 61.0
 
 ## Current Status
 
-### Completed
-- ✅ Bronze Layer (Batch + Streaming ingestion)
+### Completed ✅
+- **Bronze Layer** (Batch + Streaming ingestion)
   - 7 CSV files ingested
   - 43,200 usage events from 120 JSONL files
-- ✅ Silver Layer (Data quality & conformance)
+
+- **Silver Layer** (Data quality & conformance)
   - 8/8 transformations completed
   - 99%+ data quality for most datasets
   - Anomaly detection with 3 statistical methods
   - Schema v1/v2 compatibility
 
-### In Progress
-- 🔄 Gold Layer (Business aggregations)
-- 🔄 Speed Layer (Real-time processing)
-- 🔄 Serving Layer (AstraDB/Cassandra)
+- **Gold Layer** (Business marts)
+  - 5/5 marts created successfully
+  - 11,050 usage aggregations, 227 revenue records, 984 ticket metrics
+  - 848 GenAI token records, 6,106 anomaly records
+  - Execution time: ~12 seconds
 
-### Next Steps
-1. Implement Gold Layer transformations (5 business marts)
-2. Load data to AstraDB/Cassandra
-3. Implement demo queries
-4. Create presentation and video
+- **Serving Layer** (Infrastructure)
+  - Cassandra/AstraDB configuration and connection
+  - 5 query-optimized table schemas created
+  - Data loader implemented (Gold → Cassandra)
+  - 5 demo CQL queries implemented
+  - Execution scripts created
+
+### Ready to Execute 🎯
+1. **Setup AstraDB account** (or use local Cassandra)
+2. **Configure credentials** in `src/config/cassandra_config.py`
+3. **Run serving layer pipeline:**
+   ```bash
+   ./scripts/setup_cassandra.sh      # Create tables
+   ./scripts/load_to_cassandra.sh    # Load data
+   ./scripts/run_demo_queries.sh     # Execute queries
+   ```
+
+### Future Work 📋
+- Speed Layer (real-time streaming aggregations)
+- Complete end-to-end orchestration
+- Presentation and video
