@@ -21,7 +21,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def query_1_daily_costs_by_service(db, org_id="org_001", limit=10):
+def get_sample_org_id(db):
+    """
+    Get a sample org_id from the data.
+
+    This helper function dynamically retrieves a valid org_id from the database,
+    making queries work with any dataset without hardcoding specific org IDs.
+    """
+    collection = db.get_collection("org_daily_usage")
+    sample_doc = collection.find_one({})
+    if sample_doc and 'org_id' in sample_doc:
+        return sample_doc['org_id']
+    return None
+
+
+def query_1_daily_costs_by_service(db, org_id=None, limit=10):
     """
     Query 1: Costos diarios por organización y servicio
 
@@ -30,6 +44,13 @@ def query_1_daily_costs_by_service(db, org_id="org_001", limit=10):
 
     Use case: FinOps team tracking daily spend by service for cost attribution.
     """
+    # Get a valid org_id if not provided
+    if org_id is None:
+        org_id = get_sample_org_id(db)
+        if org_id is None:
+            logger.error("No data found in org_daily_usage collection")
+            return []
+
     logger.info("")
     logger.info("=" * 100)
     logger.info("QUERY 1: Daily Costs by Organization and Service")
@@ -67,7 +88,7 @@ def query_1_daily_costs_by_service(db, org_id="org_001", limit=10):
     return results
 
 
-def query_2_top_services_by_cost(db, org_id="org_001", window_days=30, top_n=5):
+def query_2_top_services_by_cost(db, org_id=None, window_days=30, top_n=5):
     """
     Query 2: Top-N servicios por costo en una ventana de tiempo
 
@@ -75,6 +96,13 @@ def query_2_top_services_by_cost(db, org_id="org_001", window_days=30, top_n=5):
 
     Use case: Identify which services are driving the highest costs to optimize spend.
     """
+    # Get a valid org_id if not provided
+    if org_id is None:
+        org_id = get_sample_org_id(db)
+        if org_id is None:
+            logger.error("No data found in collections")
+            return []
+
     logger.info("")
     logger.info("=" * 100)
     logger.info("QUERY 2: Top Services by Cost (Time Window)")
@@ -155,7 +183,7 @@ def query_3_critical_tickets_sla_breach(db, date_str=None, severity="critical"):
     return results
 
 
-def query_4_monthly_revenue(db, org_id="org_001", limit=6):
+def query_4_monthly_revenue(db, org_id=None, limit=6):
     """
     Query 4: Revenue mensual por organización
 
@@ -163,6 +191,13 @@ def query_4_monthly_revenue(db, org_id="org_001", limit=6):
 
     Use case: Finance team monitoring revenue trends and billing metrics.
     """
+    # Get a valid org_id if not provided
+    if org_id is None:
+        org_id = get_sample_org_id(db)
+        if org_id is None:
+            logger.error("No data found in collections")
+            return []
+
     logger.info("")
     logger.info("=" * 100)
     logger.info("QUERY 4: Monthly Revenue by Organization")
@@ -201,7 +236,7 @@ def query_4_monthly_revenue(db, org_id="org_001", limit=6):
     return results
 
 
-def query_5_genai_token_usage(db, org_id="org_001", limit=10):
+def query_5_genai_token_usage(db, org_id=None, limit=10):
     """
     Query 5: Uso de tokens GenAI por organización y fecha
 
@@ -209,6 +244,13 @@ def query_5_genai_token_usage(db, org_id="org_001", limit=10):
 
     Use case: Product team monitoring GenAI feature adoption and associated costs.
     """
+    # Get a valid org_id if not provided
+    if org_id is None:
+        org_id = get_sample_org_id(db)
+        if org_id is None:
+            logger.error("No data found in collections")
+            return []
+
     logger.info("")
     logger.info("=" * 100)
     logger.info("QUERY 5: GenAI Token Usage by Organization")
@@ -252,12 +294,20 @@ def run_all_queries(db):
     logger.info("RUNNING ALL 5 DEMO QUERIES")
     logger.info("=" * 100)
 
+    # Get a valid org_id from the data for queries 1, 2, 4, 5
+    sample_org_id = get_sample_org_id(db)
+
+    if sample_org_id:
+        logger.info(f"Using sample org_id: {sample_org_id}")
+    else:
+        logger.warning("No org_id found in data - some queries may return 0 rows")
+
     queries = [
-        ("Query 1: Daily Costs by Service", lambda: query_1_daily_costs_by_service(db, org_id="org_001", limit=10)),
-        ("Query 2: Top Services by Cost", lambda: query_2_top_services_by_cost(db, org_id="org_001", window_days=30, top_n=5)),
+        ("Query 1: Daily Costs by Service", lambda: query_1_daily_costs_by_service(db, org_id=sample_org_id, limit=10)),
+        ("Query 2: Top Services by Cost", lambda: query_2_top_services_by_cost(db, org_id=sample_org_id, window_days=30, top_n=5)),
         ("Query 3: Critical Tickets & SLA", lambda: query_3_critical_tickets_sla_breach(db, date_str="2025-07-20", severity="critical")),
-        ("Query 4: Monthly Revenue", lambda: query_4_monthly_revenue(db, org_id="org_001", limit=6)),
-        ("Query 5: GenAI Token Usage", lambda: query_5_genai_token_usage(db, org_id="org_001", limit=10))
+        ("Query 4: Monthly Revenue", lambda: query_4_monthly_revenue(db, org_id=sample_org_id, limit=6)),
+        ("Query 5: GenAI Token Usage", lambda: query_5_genai_token_usage(db, org_id=sample_org_id, limit=10))
     ]
 
     results = {}
