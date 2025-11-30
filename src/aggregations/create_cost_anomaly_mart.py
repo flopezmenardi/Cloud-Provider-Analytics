@@ -1,10 +1,12 @@
 """Gold mart: cost_anomaly_mart
 
 Aggregated view of cost anomalies for alerting and monitoring.
+Per project requirements: anomaly detection using 3 methods (z-score, MAD, percentile).
 """
 import logging, sys
 from pathlib import Path
 from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.window import Window
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -73,6 +75,23 @@ def create_cost_anomaly_mart(spark: SparkSession) -> None:
         # Add usage_date from event_timestamp
         df = df.withColumn("usage_date", F.to_date(F.col("event_timestamp")))
 
+        # Calculate anomaly score (number of methods that flagged it)
+        df = df.withColumn(
+            "anomaly_score",
+            F.when(F.col("is_anomaly_zscore") == True, 1).otherwise(0) +
+            F.when(F.col("is_anomaly_mad") == True, 1).otherwise(0) +
+            F.when(F.col("is_anomaly_percentile") == True, 1).otherwise(0)
+        )
+
+        # Determine primary detection method
+        df = df.withColumn(
+            "primary_method",
+            F.when(F.col("is_anomaly_zscore") == True, "zscore")
+            .when(F.col("is_anomaly_mad") == True, "mad")
+            .when(F.col("is_anomaly_percentile") == True, "percentile")
+            .otherwise("unknown")
+        )
+
         # Aggregate by org_id, usage_date, service
         logger.info("Aggregating anomalies...")
 
@@ -84,15 +103,38 @@ def create_cost_anomaly_mart(spark: SparkSession) -> None:
             F.sum("cost_usd_increment").alias("total_anomalous_cost"),
             F.avg("cost_usd_increment").alias("avg_anomalous_cost"),
             F.max("cost_usd_increment").alias("max_cost_spike"),
+            F.min("cost_usd_increment").alias("min_anomalous_cost"),
+
+            # Anomaly scores
+            F.avg("anomaly_score").alias("avg_anomaly_score"),
+            F.max("anomaly_score").alias("max_anomaly_score"),
 
             # Detection method counts
             F.sum(F.when(F.col("is_anomaly_zscore") == True, 1).otherwise(0)).alias("zscore_detections"),
             F.sum(F.when(F.col("is_anomaly_mad") == True, 1).otherwise(0)).alias("mad_detections"),
-            F.sum(F.when(F.col("is_anomaly_percentile") == True, 1).otherwise(0)).alias("percentile_detections")
+            F.sum(F.when(F.col("is_anomaly_percentile") == True, 1).otherwise(0)).alias("percentile_detections"),
+
+            # Multi-method detections (flagged by 2+ methods = high confidence)
+            F.sum(F.when(F.col("anomaly_score") >= 2, 1).otherwise(0)).alias("high_confidence_anomalies"),
+            F.sum(F.when(F.col("anomaly_score") == 3, 1).otherwise(0)).alias("confirmed_anomalies")
+        )
+
+        # Add severity classification
+        agg_df = agg_df.withColumn(
+            "severity",
+            F.when(F.col("max_anomaly_score") == 3, "critical")
+            .when(F.col("max_anomaly_score") == 2, "high")
+            .when(F.col("max_anomaly_score") == 1, "medium")
+            .otherwise("low")
         )
 
         final_count = agg_df.count()
         logger.info(f"Final aggregated anomaly rows: {final_count:,}")
+
+        # Log anomaly breakdown
+        severity_counts = agg_df.groupBy("severity").count().collect()
+        for row in severity_counts:
+            logger.info(f"  Severity {row['severity']}: {row['count']:,} org-date-service combinations")
 
     # Write to Gold
     gold_path = get_gold_path("cost_anomaly_mart")

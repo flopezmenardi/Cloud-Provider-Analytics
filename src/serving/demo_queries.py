@@ -286,12 +286,59 @@ def query_5_genai_token_usage(db, org_id=None, limit=10):
     return results
 
 
+def query_6_cost_anomalies(db, severity="critical", limit=10):
+    """
+    Query 6: Cost anomalies by severity
+
+    Show detected cost anomalies with severity classification.
+    Demonstrates 3-method anomaly detection (z-score, MAD, percentile).
+
+    Use case: FinOps team investigating unusual spending patterns.
+    """
+    logger.info("")
+    logger.info("=" * 100)
+    logger.info("QUERY 6: Cost Anomalies by Severity")
+    logger.info("=" * 100)
+    logger.info(f"Parameters: severity={severity}, limit={limit}")
+    logger.info("")
+
+    collection = db.get_collection("cost_anomalies")
+
+    cursor = collection.find(
+        filter={"severity": severity},
+        sort={"max_cost_spike": -1},
+        limit=limit
+    )
+
+    results = []
+    for doc in cursor:
+        results.append([
+            doc.get('org_id', ''),
+            doc.get('usage_date', ''),
+            doc.get('service', ''),
+            doc.get('severity', ''),
+            f"${float(doc.get('total_anomalous_cost', 0)):,.2f}",
+            f"${float(doc.get('max_cost_spike', 0)):,.2f}",
+            int(doc.get('zscore_detections', 0)),
+            int(doc.get('mad_detections', 0)),
+            int(doc.get('percentile_detections', 0))
+        ])
+
+    headers = ["Org ID", "Date", "Service", "Severity", "Total Cost", "Max Spike", "Z-Score", "MAD", "Percentile"]
+    print(tabulate(results, headers=headers, tablefmt="grid"))
+
+    logger.info(f"Retrieved {len(results)} anomaly records")
+    logger.info(f"Business insight: {severity} cost anomalies detected using 3 statistical methods")
+
+    return results
+
+
 def run_all_queries(db):
-    """Run all 5 demo queries with sample parameters."""
+    """Run all 6 demo queries with sample parameters."""
 
     logger.info("")
     logger.info("=" * 100)
-    logger.info("RUNNING ALL 5 DEMO QUERIES")
+    logger.info("RUNNING ALL 6 DEMO QUERIES")
     logger.info("=" * 100)
 
     # Get a valid org_id from the data for queries 1, 2, 4, 5
@@ -307,7 +354,8 @@ def run_all_queries(db):
         ("Query 2: Top Services by Cost", lambda: query_2_top_services_by_cost(db, org_id=sample_org_id, window_days=30, top_n=5)),
         ("Query 3: Critical Tickets & SLA", lambda: query_3_critical_tickets_sla_breach(db, date_str="2025-07-20", severity="critical")),
         ("Query 4: Monthly Revenue", lambda: query_4_monthly_revenue(db, org_id=sample_org_id, limit=6)),
-        ("Query 5: GenAI Token Usage", lambda: query_5_genai_token_usage(db, org_id=sample_org_id, limit=10))
+        ("Query 5: GenAI Token Usage", lambda: query_5_genai_token_usage(db, org_id=sample_org_id, limit=10)),
+        ("Query 6: Cost Anomalies", lambda: query_6_cost_anomalies(db, severity="critical", limit=10))
     ]
 
     results = {}

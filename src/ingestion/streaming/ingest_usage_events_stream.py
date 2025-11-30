@@ -91,14 +91,21 @@ def add_derived_columns(df):
 
 def ingest_usage_events_stream(
     spark: SparkSession,
-    mode: str = "append"
+    mode: str = "append",
+    watermark_delay: str = "10 minutes"
 ) -> StreamingQuery:
     """
     Ingest usage events from JSONL files using Spark Structured Streaming
     
+    Implements required features per project specification:
+    - Explicit schema definition
+    - Watermark for late data handling
+    - Deduplication by event_id
+    
     Args:
         spark: SparkSession
         mode: Output mode (append, complete, update)
+        watermark_delay: How late data can arrive (default: 10 minutes)
         
     Returns:
         StreamingQuery object
@@ -111,20 +118,27 @@ def ingest_usage_events_stream(
             f"Source directory not found: {LANDING_USAGE_EVENTS_STREAM}"
         )
     
-    # Read JSONL files as streaming source
-    # Using file source with maxFilesPerTrigger for batch-like processing
+    # Read JSONL files as streaming source with explicit schema
     stream_df = spark.readStream \
         .option("maxFilesPerTrigger", 10) \
         .schema(USAGE_EVENT_SCHEMA) \
         .json(str(LANDING_USAGE_EVENTS_STREAM / "*.jsonl"))
     
-    logger.info("Streaming source configured")
+    logger.info("Streaming source configured with explicit schema")
     
     # Normalize value column (handle string/number inconsistencies)
     stream_df = normalize_value_column(stream_df)
     
-    # Add derived columns
+    # Add derived columns (includes event_timestamp for watermark)
     stream_df = add_derived_columns(stream_df)
+    
+    # Apply watermark for late data handling (required by project spec)
+    stream_df = stream_df.withWatermark("event_timestamp", watermark_delay)
+    logger.info(f"Watermark applied: {watermark_delay} delay for late data")
+    
+    # Deduplication by event_id within watermark window (required by project spec)
+    stream_df = stream_df.dropDuplicates(["event_id"])
+    logger.info("Deduplication by event_id enabled")
     
     # Add ingestion metadata
     stream_df = stream_df.withColumn("ingestion_timestamp", current_timestamp())
@@ -154,6 +168,8 @@ def ingest_usage_events_batch(
     """
     Ingest usage events from JSONL files as batch (for initial load)
     
+    Implements deduplication by event_id to ensure idempotency.
+    
     Args:
         spark: SparkSession
         mode: Write mode (overwrite, append)
@@ -165,12 +181,20 @@ def ingest_usage_events_batch(
             f"Source directory not found: {LANDING_USAGE_EVENTS_STREAM}"
         )
     
-    # Read all JSONL files as batch
+    # Read all JSONL files as batch with explicit schema
+    # Use the directory path directly - Spark will read all JSONL files
+    jsonl_files = str(LANDING_USAGE_EVENTS_STREAM) + "/*.jsonl"
     df = spark.read \
         .schema(USAGE_EVENT_SCHEMA) \
-        .json(str(LANDING_USAGE_EVENTS_STREAM / "*.jsonl"))
+        .json(jsonl_files)
     
-    logger.info(f"Read {df.count()} events from JSONL files")
+    initial_count = df.count()
+    logger.info(f"Read {initial_count:,} events from JSONL files")
+    
+    # Deduplication by event_id (required by project spec)
+    df = df.dropDuplicates(["event_id"])
+    dedup_count = df.count()
+    logger.info(f"After dedup by event_id: {dedup_count:,} events ({initial_count - dedup_count} duplicates removed)")
     
     # Normalize value column
     df = normalize_value_column(df)
@@ -183,7 +207,7 @@ def ingest_usage_events_batch(
     df = df.withColumn("source_type", lit("batch"))
     df = df.withColumn("source_directory", lit(str(LANDING_USAGE_EVENTS_STREAM)))
     
-    # Write to bronze layer
+    # Write to bronze layer partitioned by date
     df.write \
         .mode(mode) \
         .format("parquet") \
@@ -191,7 +215,7 @@ def ingest_usage_events_batch(
         .partitionBy("event_year", "event_month", "event_day") \
         .save(str(BRONZE_USAGE_EVENTS))
     
-    logger.info(f"Batch ingestion completed. Wrote to {BRONZE_USAGE_EVENTS}")
+    logger.info(f"Batch ingestion completed. Wrote {dedup_count:,} events to {BRONZE_USAGE_EVENTS}")
 
 
 if __name__ == "__main__":

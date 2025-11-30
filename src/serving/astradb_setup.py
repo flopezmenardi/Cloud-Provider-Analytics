@@ -28,7 +28,8 @@ def create_collections(db):
         "org_service_costs",
         "tickets_critical_daily",
         "revenue_monthly",
-        "genai_tokens_daily"
+        "genai_tokens_daily",
+        "cost_anomalies"
     ]
 
     for collection_name in collections:
@@ -58,7 +59,8 @@ def verify_collections(db):
         "org_service_costs",
         "tickets_critical_daily",
         "revenue_monthly",
-        "genai_tokens_daily"
+        "genai_tokens_daily",
+        "cost_anomalies"
     ]
 
     for name in expected:

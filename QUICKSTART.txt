@@ -1,0 +1,152 @@
+CLOUD PROVIDER ANALYTICS - QUICK START GUIDE
+============================================
+
+Team: Bengolea (63515), Ijjas (63555), Lopez Menardi (62707)
+Course: 72.80 Big Data - ITBA
+
+PREREQUISITES
+-------------
+- Python 3.9+
+- Java 17 (brew install openjdk@17)
+- PySpark 4.x (installed via requirements.txt)
+
+SETUP
+-----
+1. Open terminal in project directory
+2. Run: source setup.sh
+
+   This will:
+   - Create/activate virtual environment
+   - Install dependencies
+   - Configure Java 17 for Spark compatibility
+
+
+RUNNING THE PIPELINE
+--------------------
+
+Full Pipeline (Bronze -> Silver -> Gold):
+  source setup.sh
+  python -m src.orchestration.pipeline_orchestrator --full
+
+Individual Stages:
+  python -m src.orchestration.pipeline_orchestrator --bronze-only
+  python -m src.orchestration.pipeline_orchestrator --silver-only
+  python -m src.orchestration.pipeline_orchestrator --gold-only
+
+With Serving Layer (requires AstraDB config):
+  python -m src.orchestration.pipeline_orchestrator --full --serving
+
+With Speed Layer (streaming aggregations):
+  python -m src.orchestration.pipeline_orchestrator --full --speed --speed-duration 60
+
+
+RUNNING TESTS
+-------------
+source setup.sh
+python -m pytest tests/ -v
+
+Specific test files:
+  python -m pytest tests/test_data_quality.py -v
+  python -m pytest tests/test_edge_cases.py -v
+  python -m pytest tests/test_transformations.py -v
+  python -m pytest tests/test_integration.py -v
+
+
+INDIVIDUAL SCRIPTS
+------------------
+
+Batch Ingestion:
+  python -m src.ingestion.batch.ingest_all_batch
+
+Streaming Ingestion:
+  python -m src.ingestion.streaming.ingest_usage_events_stream
+
+Silver Transformations:
+  python -m src.transformations.transform_all
+
+Gold Marts:
+  python -m src.aggregations.create_all_marts
+
+Speed Layer (real-time):
+  python -m src.speed.streaming_aggregations --mode all --duration 60
+
+Demo Queries (requires AstraDB):
+  python -m src.serving.demo_queries
+
+Generate Evidence:
+  python scripts/generate_evidence.py
+
+
+SHELL SCRIPTS
+-------------
+./scripts/run_full_pipeline.sh      Run complete pipeline
+./scripts/run_batch_ingestion.sh    Bronze batch only
+./scripts/run_streaming_ingestion.sh Bronze streaming only
+./scripts/run_silver_transformations.sh Silver layer only
+./scripts/run_gold_marts.sh         Gold layer only
+./scripts/run_speed_layer.sh        Speed layer streaming
+./scripts/run_tests.sh              Run all tests
+
+
+DATA LAKE STRUCTURE
+-------------------
+datalake/
+  landing/           Raw CSV and JSONL files
+  bronze/            Ingested Parquet (raw + metadata)
+  silver/            Transformed Parquet (cleaned, validated)
+    quarantine/      Invalid records
+  gold/              Business marts
+  speed/             Real-time aggregations
+  evidence/          Pipeline metrics and lineage
+
+
+PIPELINE STAGES
+---------------
+1. BRONZE (Batch)    - Ingest 7 CSV files + add metadata
+2. BRONZE (Stream)   - Ingest JSONL usage events + dedup
+3. SILVER            - Data quality, validation, enrichment
+4. GOLD              - Business aggregations (5 marts)
+5. SERVING           - Load to AstraDB (optional)
+6. SPEED             - Real-time streaming (optional)
+
+
+KEY FEATURES
+------------
+- Lambda Architecture (Batch + Speed + Serving layers)
+- Medallion Architecture (Bronze -> Silver -> Gold)
+- 3 Anomaly Detection Methods (z-score, MAD, percentile)
+- Schema Evolution (v1 -> v2 handling)
+- Data Quality Framework with quarantine
+- Idempotent writes
+- Data lineage tracking
+
+
+EXPECTED OUTPUT
+---------------
+After running --full:
+  Bronze:  ~47,000 records ingested
+  Silver:  ~47,000 records (99%+ quality rate)
+  Gold:    ~20,000 aggregated records across 5 marts
+
+Anomaly Detection:
+  ~12,000 cost anomalies detected (~28%)
+  Severities: medium, high, critical
+
+
+TROUBLESHOOTING
+---------------
+Java errors:
+  Ensure JAVA_HOME points to Java 17
+  Run: source setup.sh (applies Java 17 fixes)
+
+Module not found:
+  Run: source setup.sh
+  Or: pip install -r requirements.txt
+
+Spark memory issues:
+  Close other applications
+  Reduce data volume for testing
+
+AstraDB connection:
+  Configure src/config/astradb_config.py
+  Set ASTRADB_TOKEN environment variable

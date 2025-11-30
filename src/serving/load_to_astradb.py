@@ -25,11 +25,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def clear_collection(db, collection_name: str):
+    """Clear all documents from a collection for idempotent reloads."""
+    try:
+        collection = db.get_collection(collection_name)
+        collection.delete_many({})
+        logger.info(f"  Cleared existing data from {collection_name}")
+    except Exception as e:
+        logger.warning(f"  Could not clear {collection_name}: {e}")
+
+
 def load_org_daily_usage(spark: SparkSession, db):
     """
     Load org_daily_usage_by_service Gold mart into org_daily_usage collection.
     """
     logger.info("Loading org_daily_usage...")
+    clear_collection(db, "org_daily_usage")
 
     # Read Gold mart
     gold_path = get_gold_path("org_daily_usage_by_service")
@@ -83,6 +94,7 @@ def load_org_service_costs(spark: SparkSession, db):
     Compute and load top services by cost for different time windows.
     """
     logger.info("Loading org_service_costs (Top-N by cost)...")
+    clear_collection(db, "org_service_costs")
 
     # Read Gold mart
     gold_path = get_gold_path("org_daily_usage_by_service")
@@ -142,6 +154,7 @@ def load_tickets_critical_daily(spark: SparkSession, db):
     Load tickets_by_org_date Gold mart aggregated by date and severity.
     """
     logger.info("Loading tickets_critical_daily...")
+    clear_collection(db, "tickets_critical_daily")
 
     # Read Gold mart
     gold_path = get_gold_path("tickets_by_org_date")
@@ -189,6 +202,7 @@ def load_revenue_monthly(spark: SparkSession, db):
     Load revenue_by_org_month Gold mart into revenue_monthly collection.
     """
     logger.info("Loading revenue_monthly...")
+    clear_collection(db, "revenue_monthly")
 
     # Read Gold mart
     gold_path = get_gold_path("revenue_by_org_month")
@@ -234,6 +248,7 @@ def load_genai_tokens_daily(spark: SparkSession, db):
     Load genai_tokens_by_org_date Gold mart into genai_tokens_daily collection.
     """
     logger.info("Loading genai_tokens_daily...")
+    clear_collection(db, "genai_tokens_daily")
 
     # Read Gold mart
     gold_path = get_gold_path("genai_tokens_by_org_date")
@@ -265,6 +280,58 @@ def load_genai_tokens_daily(spark: SparkSession, db):
         logger.info(f"✓ Loaded {len(documents):,} documents into genai_tokens_daily")
     else:
         logger.warning("No GenAI token data to load (no schema v2 events)")
+
+
+def load_cost_anomalies(spark: SparkSession, db):
+    """
+    Load cost_anomaly_mart Gold mart into cost_anomalies collection.
+    Demonstrates 3-method anomaly detection results.
+    """
+    logger.info("Loading cost_anomalies...")
+    clear_collection(db, "cost_anomalies")
+
+    # Read Gold mart
+    gold_path = get_gold_path("cost_anomaly_mart")
+    df = spark.read.parquet(str(gold_path))
+
+    row_count = df.count()
+    logger.info(f"  Read {row_count:,} rows from {gold_path}")
+
+    if row_count == 0:
+        logger.warning("No anomaly data to load")
+        return
+
+    pdf = df.toPandas()
+
+    # Convert to documents
+    documents = []
+    for _, row in pdf.iterrows():
+        doc_id = f"{row['org_id']}_{row['usage_date']}_{row['service']}"
+        doc = {
+            "_id": doc_id,
+            "org_id": row['org_id'],
+            "usage_date": str(row['usage_date']),
+            "service": row['service'],
+            "anomaly_count": int(row['anomaly_count']) if pd.notna(row['anomaly_count']) else 0,
+            "total_anomalous_cost": float(row['total_anomalous_cost']) if pd.notna(row['total_anomalous_cost']) else 0.0,
+            "avg_anomalous_cost": float(row['avg_anomalous_cost']) if pd.notna(row['avg_anomalous_cost']) else 0.0,
+            "max_cost_spike": float(row['max_cost_spike']) if pd.notna(row['max_cost_spike']) else 0.0,
+            "zscore_detections": int(row['zscore_detections']) if pd.notna(row['zscore_detections']) else 0,
+            "mad_detections": int(row['mad_detections']) if pd.notna(row['mad_detections']) else 0,
+            "percentile_detections": int(row['percentile_detections']) if pd.notna(row['percentile_detections']) else 0,
+            "severity": row.get('severity', 'unknown'),
+            "high_confidence_anomalies": int(row.get('high_confidence_anomalies', 0)) if pd.notna(row.get('high_confidence_anomalies')) else 0,
+            "confirmed_anomalies": int(row.get('confirmed_anomalies', 0)) if pd.notna(row.get('confirmed_anomalies')) else 0
+        }
+        documents.append(doc)
+
+    # Insert
+    if documents:
+        collection = db.get_collection("cost_anomalies")
+        collection.insert_many(documents)
+        logger.info(f"✓ Loaded {len(documents):,} documents into cost_anomalies")
+    else:
+        logger.warning("No anomaly documents to load")
 
 
 def main():
@@ -303,7 +370,8 @@ def main():
             ("org_service_costs", load_org_service_costs),
             ("tickets_critical_daily", load_tickets_critical_daily),
             ("revenue_monthly", load_revenue_monthly),
-            ("genai_tokens_daily", load_genai_tokens_daily)
+            ("genai_tokens_daily", load_genai_tokens_daily),
+            ("cost_anomalies", load_cost_anomalies)
         ]
 
         for i, (name, loader_func) in enumerate(loaders, 1):

@@ -45,14 +45,19 @@ def ingest_all_batch_sources(spark: SparkSession, mode: str = "overwrite") -> No
             raise
 
 
-if __name__ == "__main__":
+def run_all_batch_ingestion():
+    """
+    Entry point for pipeline orchestrator.
+    Creates SparkSession internally and runs all batch ingestions.
+    """
     spark = get_spark_session("IngestAllBatchSources")
     try:
         ingest_all_batch_sources(spark)
         logger.info("All batch sources ingested successfully")
-    except Exception as e:
-        logger.error(f"Batch ingestion failed: {str(e)}", exc_info=True)
-        raise
     finally:
         spark.stop()
+
+
+if __name__ == "__main__":
+    run_all_batch_ingestion()
 

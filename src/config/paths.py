@@ -38,6 +38,13 @@ SILVER_QUARANTINE = DATALAKE_ROOT / "silver" / "quarantine"
 # Gold zone paths
 GOLD_ROOT = DATALAKE_ROOT / "gold"
 
+# Evidence and state paths (for lineage tracking and idempotency)
+EVIDENCE_ROOT = DATALAKE_ROOT / "evidence"
+STATE_ROOT = DATALAKE_ROOT / "state"
+
+# Speed layer paths
+SPEED_ROOT = DATALAKE_ROOT / "speed"
+
 # Helper functions for Silver and Quarantine paths
 def get_silver_path(source_name: str) -> Path:
     """Get Silver path for a source"""
@@ -60,8 +67,10 @@ for path in [
 ]:
     path.mkdir(parents=True, exist_ok=True)
 
-# Ensure silver and gold root directories exist
+# Ensure all root directories exist
 SILVER_ROOT.mkdir(parents=True, exist_ok=True)
 SILVER_QUARANTINE.mkdir(parents=True, exist_ok=True)
 GOLD_ROOT.mkdir(parents=True, exist_ok=True)
-
+EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
+STATE_ROOT.mkdir(parents=True, exist_ok=True)
+SPEED_ROOT.mkdir(parents=True, exist_ok=True)

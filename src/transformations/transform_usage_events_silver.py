@@ -255,6 +255,56 @@ def enrich_with_customers(df: DataFrame, spark: SparkSession) -> DataFrame:
     return df
 
 
+def enrich_with_users(df: DataFrame, spark: SparkSession) -> DataFrame:
+    """
+    Enrich usage events with user metadata.
+    Join with users table from Silver (or Bronze if Silver not available).
+    
+    Required per project spec: "join a orgs/users/resources"
+    """
+    try:
+        # Try to read from Silver first, fallback to Bronze
+        try:
+            users_df = spark.read.parquet(get_silver_path("users"))
+            logger.info("Enriching with Silver users")
+        except:
+            from src.config.paths import BRONZE_USERS
+            users_df = spark.read.parquet(str(BRONZE_USERS))
+            logger.info("Enriching with Bronze users (Silver not available)")
+
+        # Get user count per org for enrichment
+        users_per_org = users_df.groupBy("org_id").agg(
+            F.count("*").alias("org_user_count"),
+            F.countDistinct("role").alias("org_role_count")
+        )
+
+        # Left join
+        df = df.join(
+            users_per_org,
+            on="org_id",
+            how="left"
+        )
+
+        # Fill nulls with 0
+        df = df.withColumn(
+            "org_user_count",
+            F.coalesce(F.col("org_user_count"), F.lit(0))
+        )
+        df = df.withColumn(
+            "org_role_count",
+            F.coalesce(F.col("org_role_count"), F.lit(0))
+        )
+
+        logger.info("User enrichment completed")
+
+    except Exception as e:
+        logger.warning(f"Could not enrich with users: {e}")
+        df = df.withColumn("org_user_count", F.lit(0))
+        df = df.withColumn("org_role_count", F.lit(0))
+
+    return df
+
+
 def add_derived_fields(df: DataFrame) -> DataFrame:
     """
     Add derived fields for analytics.
@@ -282,19 +332,21 @@ def add_derived_fields(df: DataFrame) -> DataFrame:
 
 def transform_usage_events_to_silver(spark: SparkSession) -> None:
     """
-    Main transformation function for usage_events Bronze → Silver.
+    Main transformation function for usage_events Bronze -> Silver.
 
     Steps:
     1. Read from Bronze
-    2. Normalize value column (string → double)
+    2. Normalize value column (string -> double)
     3. Compatibilize schema versions (v1/v2)
     4. Normalize dimensions (region, service, metric)
     5. Apply validations
-    6. Enrich with resources and customers
-    7. Add derived fields
-    8. Detect anomalies (3 methods)
-    9. Split valid/quarantine
-    10. Write to Silver
+    6. Enrich with resources
+    7. Enrich with customers/orgs
+    8. Enrich with users (per spec: join to orgs/users/resources)
+    9. Add derived fields
+    10. Detect anomalies (3 methods)
+    11. Split valid/quarantine
+    12. Write to Silver
     """
     logger.info("=" * 80)
     logger.info("Starting usage_events Silver transformation")
@@ -308,7 +360,7 @@ def transform_usage_events_to_silver(spark: SparkSession) -> None:
     logger.info(f"Initial record count: {initial_count:,}")
 
     # Step 1: Normalize value column
-    logger.info("Step 1: Normalizing value column (string → double)")
+    logger.info("Step 1: Normalizing value column (string -> double)")
     df = normalize_value_column(df)
 
     # Step 2: Compatibilize schema versions
@@ -336,12 +388,16 @@ def transform_usage_events_to_silver(spark: SparkSession) -> None:
     logger.info("Step 6: Enriching with customers/orgs metadata")
     df = enrich_with_customers(df, spark)
 
-    # Step 7: Add derived fields
-    logger.info("Step 7: Adding derived fields")
+    # Step 7: Enrich with users (required by spec)
+    logger.info("Step 7: Enriching with users metadata")
+    df = enrich_with_users(df, spark)
+
+    # Step 8: Add derived fields
+    logger.info("Step 8: Adding derived fields")
     df = add_derived_fields(df)
 
-    # Step 8: Detect anomalies using 3 methods
-    logger.info("Step 8: Detecting anomalies using 3 methods (z-score, MAD, percentiles)")
+    # Step 9: Detect anomalies using 3 methods
+    logger.info("Step 9: Detecting anomalies using 3 methods (z-score, MAD, percentiles)")
     df = add_anomaly_flags(
         df,
         col="cost_usd_increment",
@@ -356,8 +412,8 @@ def transform_usage_events_to_silver(spark: SparkSession) -> None:
     anomaly_count = df.filter(F.col("is_anomaly") == True).count()
     logger.info(f"  Anomalies detected: {anomaly_count:,} ({100*anomaly_count/initial_count:.2f}%)")
 
-    # Step 9: Split valid/quarantine
-    logger.info("Step 9: Splitting valid and quarantine records")
+    # Step 10: Split valid/quarantine
+    logger.info("Step 10: Splitting valid and quarantine records")
     quarantine_path = get_quarantine_path("usage_events")
 
     valid_df, quarantine_df = quarantine_records(
@@ -367,9 +423,9 @@ def transform_usage_events_to_silver(spark: SparkSession) -> None:
         source_name="usage_events"
     )
 
-    # Step 10: Write to Silver
+    # Step 11: Write to Silver
     silver_path = get_silver_path("usage_events")
-    logger.info(f"Step 10: Writing to Silver: {silver_path}")
+    logger.info(f"Step 11: Writing to Silver: {silver_path}")
 
     # Write partitioned by year and month for query performance
     valid_df.write.mode("overwrite") \
