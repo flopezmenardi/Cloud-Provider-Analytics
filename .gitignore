@@ -53,7 +53,6 @@ _SUCCESS
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
-*.ipynb
 
 # Testing
 .pytest_cache/

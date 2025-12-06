@@ -92,6 +92,7 @@ def load_org_daily_usage(spark: SparkSession, db):
 def load_org_service_costs(spark: SparkSession, db):
     """
     Compute and load top services by cost for different time windows.
+    Includes 14-day window as required by TP specification.
     """
     logger.info("Loading org_service_costs (Top-N by cost)...")
     clear_collection(db, "org_service_costs")
@@ -100,8 +101,9 @@ def load_org_service_costs(spark: SparkSession, db):
     gold_path = get_gold_path("org_daily_usage_by_service")
     df = spark.read.parquet(str(gold_path))
 
-    # Define time windows (last 7, 30, 90 days)
-    windows = [7, 30, 90]
+    # Define time windows - includes 14 days as per TP requirement
+    # "Top-N servicios por costo acumulado en los últimos 14 días para una organización"
+    windows = [7, 14, 30, 90]
 
     # Get max date to compute windows
     max_date = df.select(F.max("usage_date")).collect()[0][0]
